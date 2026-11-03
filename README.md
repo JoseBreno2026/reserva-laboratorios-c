@@ -4,7 +4,7 @@ Software desenvolvido em C para gerenciar a reserva de laboratórios acadêmicos
 
 ## 👥 Autores
 - Jose Breno Da Silva Almeida ([@JoseBreno2026](https://github.com/JoseBreno2026))
-- Jose Almeida de Freitas Neto ([@josealmeidatech](https://github.com/JoseBreno2026](https://github.com/josealmeidatech))
+- Jose Almeida de Freitas Neto ([@josealmeidatech](https://github.com/josealmeidatech))
   
 ## 🚀 Funcionalidades e Destaques
 - Sistema de agendamento que impede conflitos de horário e duplicidade.
