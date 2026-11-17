@@ -4,7 +4,7 @@
  *                (Sistema para reserva de laboratórios)
  * Autores:       Jose Almeida de Freitas Neto e
  *                Jose Breno Da Silva Almeida
- * Disciplina:    Itrodução a Programação
+ * Disciplina:    Introdução à Programação
  * Professor:     Renê Gusmão
  * Instituição:   Universidade Federal do Agreste de Pernambuco (UFAPE)
  * Data:          23/02/2026
@@ -30,6 +30,31 @@ void limparBuffer() {
 }
 
 // --- FUNÇÕES DE PERSISTÊNCIA ---
+
+// Limite de segurança para a quantidade de laboratórios lida do arquivo
+// (evita alocar memória absurda se o arquivo estiver corrompido).
+#define LIMITE_LABS_ARQUIVO 10000
+
+// Redimensiona os três arrays paralelos para nova_cap elementos.
+// Cada ponteiro só é atualizado quando o seu próprio realloc dá certo, assim
+// nenhum ponteiro fica apontando para memória já liberada.
+// Retorna 1 em caso de sucesso e 0 em caso de falha (nesse caso, o chamador
+// não deve alterar a capacidade registrada).
+static int redimensionarArrays(Laboratorio **Laboratorios, Data **Datas, Horario **Horarios, int nova_cap) {
+    Laboratorio *tmpLab = realloc(*Laboratorios, nova_cap * sizeof(Laboratorio));
+    if (tmpLab == NULL) return 0;
+    *Laboratorios = tmpLab;
+
+    Data *tmpData = realloc(*Datas, nova_cap * sizeof(Data));
+    if (tmpData == NULL) return 0;
+    *Datas = tmpData;
+
+    Horario *tmpHor = realloc(*Horarios, nova_cap * sizeof(Horario));
+    if (tmpHor == NULL) return 0;
+    *Horarios = tmpHor;
+
+    return 1;
+}
 
 // Salva os dados atuais em um arquivo binário
 void salvarDados(Laboratorio *Laboratorios, Data *Datas, Horario *Horarios) {
@@ -57,43 +82,56 @@ int compararHorariosAgenda(const void *a, const void *b) {
     return minA - minB; // Retorna diferença (ordem crescente)
 }
 
-// Carrega os dados do arquivo binário, realocando os arrays conforme necessário
+// Carrega os dados do arquivo binário, realocando os arrays conforme necessário.
+// Se o arquivo não existir, estiver vazio ou corrompido, o sistema começa sem dados.
 void carregarDados(Laboratorio **Laboratorios, Data **Datas, Horario **Horarios, int *capacidade) {
     FILE *f = fopen("dados_projeto.dat", "rb"); // Abre arquivo para leitura binária
     if (f == NULL) { // Se o arquivo não existe, inicializa os laboratórios com valores padrão
         inicializaLaboratorio(*Laboratorios, *capacidade);
         return;
     }
-    // Lê a quantidade de laboratórios do arquivo
-    fread(&qtd_labs, sizeof(int), 1, f);
-    if (qtd_labs <= 10) { //Verifica a quantidade de laboratórios carregados (qtd_labs) para definir a nova capacidade do array
-        *capacidade = 10;   // Mantém capacidade mínima de 10
-    } else {
-        // Arredonda para o próximo múltiplo de 10
-        *capacidade = ((qtd_labs + 9) / 10) * 10;
-    }
-    // Realoca os arrays para a nova capacidade
-    Laboratorio *tmpLab = realloc(*Laboratorios, (*capacidade) * sizeof(Laboratorio));
-    Data *tmpData = realloc(*Datas, (*capacidade) * sizeof(Data));
-    Horario *tmpHor = realloc(*Horarios, (*capacidade) * sizeof(Horario));
-    // Verifica se alguma realocação falhou
-    if (tmpLab == NULL || tmpData == NULL || tmpHor == NULL) {
-        free(tmpLab);   // Libera o que foi alocado (para evitar vazamento)
-        free(tmpData);
-        free(tmpHor);
-        printf("\nErro ao realocar memoria no carregamento!\n");
+    // Lê a quantidade de laboratórios do arquivo e confere se o valor faz sentido
+    int qtd_arquivo = 0;
+    if (fread(&qtd_arquivo, sizeof(int), 1, f) != 1 || qtd_arquivo < 0 || qtd_arquivo > LIMITE_LABS_ARQUIVO) {
+        printf("\nAviso: arquivo de dados vazio ou invalido. Iniciando sem dados.\n");
         fclose(f);
+        inicializaLaboratorio(*Laboratorios, *capacidade);
         return;
     }
-    // Atualiza os ponteiros originais
-    *Laboratorios = tmpLab;
-    *Datas = tmpData;
-    *Horarios = tmpHor;
-    // Lê os dados dos arrays do arquivo (exatamente qtd_labs elementos)
-    fread(*Laboratorios, sizeof(Laboratorio), qtd_labs, f);
-    fread(*Datas, sizeof(Data), qtd_labs, f);
-    fread(*Horarios, sizeof(Horario), qtd_labs, f);
+    // Define a nova capacidade: no mínimo 10, arredondando para o próximo múltiplo de 10
+    int nova_cap = (qtd_arquivo <= 10) ? 10 : ((qtd_arquivo + 9) / 10) * 10;
+    // Realoca os arrays para a nova capacidade
+    if (!redimensionarArrays(Laboratorios, Datas, Horarios, nova_cap)) {
+        printf("\nErro ao realocar memoria no carregamento!\n");
+        fclose(f);
+        inicializaLaboratorio(*Laboratorios, *capacidade);
+        return;
+    }
+    *capacidade = nova_cap;
+    // Lê os dados dos arrays do arquivo (exatamente qtd_arquivo elementos de cada)
+    size_t n = (size_t)qtd_arquivo;
+    if (fread(*Laboratorios, sizeof(Laboratorio), n, f) != n ||
+        fread(*Datas, sizeof(Data), n, f) != n ||
+        fread(*Horarios, sizeof(Horario), n, f) != n) {
+        printf("\nAviso: arquivo de dados corrompido ou incompleto. Iniciando sem dados.\n");
+        fclose(f);
+        qtd_labs = 0;
+        inicializaLaboratorio(*Laboratorios, *capacidade);
+        return;
+    }
     fclose(f); // Fecha o arquivo
+    // Confere se a quantidade de reservas de cada laboratório faz sentido; um valor fora
+    // de 0..MAX_RESERVAS faria o qsort abaixo ler fora do vetor agenda (arquivo corrompido).
+    for (int i = 0; i < qtd_arquivo; i++) {
+        int q = (*Laboratorios)[i].qtd_reservas;
+        if (q < 0 || q > MAX_RESERVAS) {
+            printf("\nAviso: arquivo de dados corrompido (reservas invalidas). Iniciando sem dados.\n");
+            qtd_labs = 0;
+            inicializaLaboratorio(*Laboratorios, *capacidade);
+            return;
+        }
+    }
+    qtd_labs = qtd_arquivo;
     // Ordena a agenda de cada laboratório ativo (para garantir consistência)
     for (int i = 0; i < qtd_labs; i++) {
         if ((*Laboratorios)[i].status == LAB_ATIVO) {
@@ -228,20 +266,10 @@ int adicionarLab(Laboratorio **Laboratorios, Data **Datas, Horario **Horarios, i
         // Verifica se precisa aumentar capacidade
         if (*qtd_labs == *capacidade) { // Array cheio
             int nova_cap = *capacidade + 10; // Aumenta em 10
-            Laboratorio *tmpLab = realloc(*Laboratorios, nova_cap * sizeof(Laboratorio));
-            Data *tmpData = realloc(*Datas, nova_cap * sizeof(Data));
-            Horario *tmpHor = realloc(*Horarios, nova_cap * sizeof(Horario));
-            if (tmpLab == NULL || tmpData == NULL || tmpHor == NULL) {
-                free(tmpLab); // Libera o que foi alocado (pode haver alguns bem-sucedidos)
-                free(tmpData);
-                free(tmpHor);
+            if (!redimensionarArrays(Laboratorios, Datas, Horarios, nova_cap)) {
                 printf("\nErro ao realocar memoria!\n");
-                return 0; // Falha
+                return 0; // Falha (os arrays continuam válidos, com a capacidade antiga)
             }
-            // Atualiza os ponteiros
-            *Laboratorios = tmpLab;
-            *Datas = tmpData;
-            *Horarios = tmpHor;
             // Inicializa os novos slots (do antigo *capacidade até nova_cap-1) como indisponíveis
             for (int j = *capacidade; j < nova_cap; j++) {
                 (*Laboratorios)[j].status = LAB_INDISPONIVEL;
@@ -277,6 +305,10 @@ int adicionarLab(Laboratorio **Laboratorios, Data **Datas, Horario **Horarios, i
 
 // Lista todos os laboratórios ativos em ordem crescente de ID
 void listarLaboratorio(Laboratorio *Laboratorios, Data *Datas, Horario *Horarios) {
+    if (qtd_labs == 0) { // Nada cadastrado: evita alocar um array de tamanho zero
+        printf("\nNenhum laboratorio cadastrado.\n");
+        return;
+    }
     // Aloca um array temporário para copiar apenas os laboratórios ativos
     Laboratorio *copia = malloc(qtd_labs * sizeof(Laboratorio));
     if (copia == NULL) {
@@ -398,6 +430,7 @@ int atualizarLaboratorio(Laboratorio *Laboratorios, int id, Data *Datas, Horario
     printf("\nNovo nome: "); 
     limparBuffer(); 
     scanf("%63[^\n]", tempLab.nome); // Lê string com espaços
+    limparBuffer(); // Descarta o que passou de 63 caracteres (e o '\n')
     // 2. Capacidade
     printf("Nova capacidade: "); 
     if (scanf("%d", &tempLab.capacidade) != 1) { 
@@ -405,10 +438,15 @@ int atualizarLaboratorio(Laboratorio *Laboratorios, int id, Data *Datas, Horario
         limparBuffer(); 
         return 0; 
     }
+    if (tempLab.capacidade <= 0) {
+        printf("Erro: A capacidade deve ser maior que zero!\n");
+        return 0;
+    }
     // 3. Equipamentos
     printf("Novos equipamentos: "); 
     limparBuffer();
     scanf("%255[^\n]", tempLab.equipamentos);
+    limparBuffer(); // Descarta o que passou de 255 caracteres (e o '\n')
     // 4. Data
     printf("Nova data (dia mes): "); 
     if (scanf("%d %d", &tempData.dia, &tempData.mes) != 2) { 
@@ -449,6 +487,24 @@ int atualizarLaboratorio(Laboratorio *Laboratorios, int id, Data *Datas, Horario
         printf("\nERRO: O fechamento deve ser posterior a abertura! Alteracoes descartadas.\n");
         return 0;
     }
+    // 7. As reservas que já existem precisam continuar válidas com os novos dados
+    for (int r = 0; r < tempLab.qtd_reservas; r++) {
+        if (!tempLab.agenda[r].ativa) continue;
+        int r_ini = tempLab.agenda[r].inicio.hora * 60 + tempLab.agenda[r].inicio.minuto;
+        int r_fim = tempLab.agenda[r].fim.hora * 60 + tempLab.agenda[r].fim.minuto;
+        if (r_ini < min_abre || r_fim > min_fecha) {
+            printf("\nERRO: A reserva de %s (%02d:%02d ate %02d:%02d) ficaria fora do novo horario de funcionamento! Alteracoes descartadas.\n",
+                   tempLab.agenda[r].solicitante,
+                   tempLab.agenda[r].inicio.hora, tempLab.agenda[r].inicio.minuto,
+                   tempLab.agenda[r].fim.hora, tempLab.agenda[r].fim.minuto);
+            return 0;
+        }
+        if (tempLab.agenda[r].qtd_pessoas > tempLab.capacidade) {
+            printf("\nERRO: A reserva de %s tem %d pessoas, acima da nova capacidade (%d)! Alteracoes descartadas.\n",
+                   tempLab.agenda[r].solicitante, tempLab.agenda[r].qtd_pessoas, tempLab.capacidade);
+            return 0;
+        }
+    }
     // --- MOMENTO DA ATUALIZAÇÃO REAL ---
     // Se o código chegou até aqui, significa que TODAS as validações passaram.
     // Agora sim, movemos os dados temporários para os arrays oficiais.
@@ -469,6 +525,10 @@ int reservaLaboratorio(Laboratorio *Laboratorios, int id, Data *Datas) {
         return -1;
     }
     Laboratorio *lab = &Laboratorios[idx];
+    if (lab->qtd_reservas >= MAX_RESERVAS) {
+        printf("\nERRO: Limite de reservas para este laboratorio atingido.\n");
+        return -1;
+    }
     // Garantir que a agenda está ordenada (importante para a lógica de intervalos)
     qsort(lab->agenda, lab->qtd_reservas, sizeof(ReservaLab), compararHorariosAgenda);
     // 1. Mostrar Informações Básicas
@@ -503,15 +563,24 @@ int reservaLaboratorio(Laboratorio *Laboratorios, int id, Data *Datas) {
         }
     }
     // 3. Dados do Solicitante
-    char nome_solicitante[64];
+    char nome_solicitante[64] = "";
     int pessoas;
     printf("\n\nNome do Solicitante: ");
     limparBuffer();
-    scanf("%63[^\n]", nome_solicitante);
+    // Rejeita nome vazio ou formado só por espaços
+    if (scanf("%63[^\n]", nome_solicitante) != 1 || strspn(nome_solicitante, " \t") == strlen(nome_solicitante)) {
+        printf("\nERRO: Nome do solicitante invalido!\n");
+        return -1;
+    }
+    limparBuffer(); // Descarta o que passou de 63 caracteres (e o '\n')
     printf("Quantidade de pessoas: ");
     if (scanf("%d", &pessoas) != 1) {
         printf("\nERRO: Entrada invalida!\n");
         limparBuffer();
+        return -1;
+    }
+    if (pessoas <= 0) {
+        printf("\nERRO: A quantidade de pessoas deve ser maior que zero!\n");
         return -1;
     }
     if (pessoas > lab->capacidade) {
@@ -523,6 +592,10 @@ int reservaLaboratorio(Laboratorio *Laboratorios, int id, Data *Datas) {
     printf("Horario de inicio desejado (Hora Min): ");
     if (scanf("%d %d", &h_ini, &m_ini) != 2) {
         limparBuffer();
+        return -1;
+    }
+    if (!validarHorario(h_ini, m_ini)) {
+        printf("\nERRO: Horario invalido (hora 00-23, minuto 00-59)!\n");
         return -1;
     }
     int inicio_desejado = h_ini * 60 + m_ini;
@@ -574,6 +647,7 @@ int reservaLaboratorio(Laboratorio *Laboratorios, int id, Data *Datas) {
         return -1;
     }
     int pos = lab->qtd_reservas;
+    memset(&lab->agenda[pos], 0, sizeof(ReservaLab)); // Zera todos os campos (nada de lixo de memória no arquivo)
     strcpy(lab->agenda[pos].solicitante, nome_solicitante);
     lab->agenda[pos].qtd_pessoas = pessoas;
     lab->agenda[pos].inicio.hora = h_ini;
@@ -631,6 +705,7 @@ int cancelarReserva(Laboratorio *Laboratorios, int id, Horario *HorariosAtuais) 
         lab->agenda[i] = lab->agenda[i + 1];
     }
     // 4. Atualizar contagem e status
+    lab->agenda[lab->qtd_reservas - 1].ativa = 0; // O último slot ficou vago
     lab->qtd_reservas--;
     if (lab->qtd_reservas == 0) {
         lab->status_reserva = LAB_DISPONIVEL; // Se não há mais reservas, marca como disponível

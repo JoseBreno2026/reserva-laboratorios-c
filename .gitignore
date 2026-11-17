@@ -1,0 +1,14 @@
+# Executáveis e arquivos de compilação
+*.exe
+*.o
+*.out
+sistema_reservas
+
+# Dados gerados pelo programa em tempo de execução
+*.dat
+
+# Editores / sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

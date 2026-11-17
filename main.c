@@ -4,7 +4,7 @@
  *                (Sistema para reserva de laboratórios)
  * Autores:       Jose Almeida de Freitas Neto e
  *                Jose Breno Da Silva Almeida
- * Disciplina:    Itrodução a Programação
+ * Disciplina:    Introdução à Programação
  * Professor:     Renê Gusmão
  * Instituição:   Universidade Federal do Agreste de Pernambuco (UFAPE)
  * Data:          23/02/2026
@@ -57,6 +57,10 @@ int main (void) {
         
         // Leitura da opção com validação.
         if (scanf("%d", &op) != 1) {
+            if (feof(stdin)) { // Entrada encerrada (Ctrl+D / Ctrl+Z): sai em vez de repetir o menu para sempre.
+                printf("\nEntrada encerrada. Saindo...\n");
+                break;
+            }
             printf("\nErro: Digite apenas numeros!\n");
             limparBuffer(); // Limpa o buffer em caso de entrada inválida.
             op = -1; // Define opção inválida para não executar nenhum case.
@@ -74,6 +78,7 @@ int main (void) {
                 printf("\nNome: "); 
                 // Lê o nome (até 63 caracteres, permitindo espaços).
                 scanf(" %63[^\n]", a.nome);
+                limparBuffer(); // Descarta o que passou de 63 caracteres (e o '\n')
     
                 printf("Capacidade: "); 
                 // Lê a capacidade e valida se é um número.
@@ -83,9 +88,15 @@ int main (void) {
                     break; 
                 }
 
+                if (a.capacidade <= 0) {
+                    printf("Erro: A capacidade deve ser maior que zero!\n");
+                    break;
+                }
+
                 printf("Equipamentos: "); 
                 // Lê a descrição dos equipamentos (até 255 caracteres).
                 scanf(" %255[^\n]", a.equipamentos);
+                limparBuffer(); // Descarta o que passou de 255 caracteres (e o '\n')
 
                 printf("Data de disponibilidade (Dia Mes): ");
                 // Lê dia e mês.
@@ -127,6 +138,12 @@ int main (void) {
                 if (!validarHorario(a.fechamento.hora, a.fechamento.minuto)) { 
                     printf("Erro: Hora %dh:%dm fora do padrao (00-23)!\n", a.fechamento.hora, a.fechamento.minuto); 
                     break; 
+                }
+
+                // O fechamento deve ser posterior à abertura.
+                if (a.fechamento.hora * 60 + a.fechamento.minuto <= a.abertura.hora * 60 + a.abertura.minuto) {
+                    printf("Erro: O fechamento deve ser posterior a abertura!\n");
+                    break;
                 }
 
                 // Inicialização de campos de controle (redundante, mas seguro).
@@ -200,7 +217,11 @@ int main (void) {
             case 6: { // Reservar laboratório.
                 int ID; 
                 printf("\nID para reserva: "); 
-                scanf("%d", &ID);
+                if(scanf("%d", &ID) != 1) { 
+                    printf("ID invalido!\n"); 
+                    limparBuffer(); 
+                    break; 
+                }
                 
                 if(reservaLaboratorio(Laboratorios, ID, Datas) != -1) {
                     printf("\nReserva confirmada com sucesso!\n");
@@ -234,7 +255,7 @@ int main (void) {
                 break;
 
             case 0: // Sair do programa.
-                printf("\nSaindo e salvando...\n"); 
+                printf("\nSaindo...\n"); 
                 break;
 
             default: // Opção inválida (não prevista no menu).

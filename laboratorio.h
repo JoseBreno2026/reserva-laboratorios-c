@@ -4,7 +4,7 @@
  *                (Sistema para reserva de laboratórios)
  * Autores:       Jose Almeida de Freitas Neto e
  *                Jose Breno Da Silva Almeida
- * Disciplina:    Itrodução a Programação
+ * Disciplina:    Introdução à Programação
  * Professor:     Renê Gusmão
  * Instituição:   Universidade Federal do Agreste de Pernambuco (UFAPE)
  * Data:          23/02/2026
@@ -88,7 +88,7 @@ void carregarDados(Laboratorio **Laboratorios, Data **Datas, Horario **Horarios,
 // Inicialização e listagens
 void inicializaLaboratorio(Laboratorio *Laboratorios, int capacidade);              // Inicializa todos os slots do array com valores padrão.
 void imprimirDadosLab(Laboratorio lab, Data d, Horario h);                          // Imprime os dados completos de um laboratório, incluindo reservas.
-void listarLaboratorio(Laboratorio *Laboratorios, Data *Datas, Horario *Horarios); // Lista todos os laboratórios ativos em ordem alfabética.
+void listarLaboratorio(Laboratorio *Laboratorios, Data *Datas, Horario *Horarios); // Lista todos os laboratórios ativos em ordem crescente de ID.
 void listarLaboratoriosDisponiveis(Laboratorio *Laboratorios, Data *Datas, Horario *Horarios); // Lista laboratórios com pelo menos um horário livre.
 void listarLaboratoriosOcupados(Laboratorio *Laboratorios, Data *Datas, Horario *Horarios);   // Lista laboratórios que possuem reservas.
 
